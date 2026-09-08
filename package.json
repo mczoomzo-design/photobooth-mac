@@ -1,0 +1,36 @@
+{
+  "name": "photobooth-mac",
+  "version": "1.0.0",
+  "description": "Photo Booth desktop (macOS) — Canon EOS RP via USB-C, receipt slip + real QR download",
+  "main": "main.js",
+  "author": "Photo Booth",
+  "license": "ISC",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac dmg",
+    "dist:dir": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.photobooth.mac",
+    "productName": "Photo Booth",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "directories": { "output": "release" },
+    "mac": {
+      "category": "public.app-category.photography",
+      "target": [{ "target": "dmg", "arch": ["universal"] }],
+      "extendInfo": {
+        "NSCameraUsageDescription": "ใช้กล้อง (Canon EOS RP ผ่าน USB-C) เพื่อถ่ายรูปในตู้ถ่ายภาพ",
+        "NSMicrophoneUsageDescription": "ไม่ได้ใช้ไมโครโฟน"
+      }
+    },
+    "dmg": { "title": "Photo Booth" }
+  }
+}
