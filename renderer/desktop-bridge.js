@@ -72,14 +72,42 @@
     if (cur) sel.value = cur;
   }
 
-  // refresh the list whenever the settings sheet is opened
+  /* ---- Bluetooth printer picker (paired 80mm SPP printers = /dev/cu.*) ---- */
+  const PRN_KEY = 'btPrinterPath';
+  function ensurePrnField() {
+    if (document.getElementById('btSel')) return;
+    const sheet = document.querySelector('#printerSheet .sheet-card');
+    if (!sheet) return;
+    const wrap = document.createElement('label');
+    wrap.className = 'fld';
+    wrap.innerHTML = 'เครื่องปริ้นบลูทูธ 80mm (จับคู่ใน macOS ก่อน)' +
+      '<select id="btSel" style="width:100%;padding:12px;border-radius:12px;border:2px solid #e6e6ea;font:inherit"></select>';
+    const cam = document.getElementById('camSel');
+    const anchor = cam ? cam.closest('.fld') : sheet.querySelector('.fld');
+    if (anchor && anchor.nextSibling) sheet.insertBefore(wrap, anchor.nextSibling);
+    else sheet.appendChild(wrap);
+    document.getElementById('btSel').addEventListener('change', e => s(PRN_KEY, e.target.value));
+  }
+  async function populatePrinters() {
+    ensurePrnField();
+    const sel = document.getElementById('btSel');
+    if (!sel || !window.desktop || !window.desktop.listPrinters) return;
+    let list = [];
+    try { list = await window.desktop.listPrinters(); } catch (e) {}
+    const cur = g(PRN_KEY);
+    sel.innerHTML = '<option value="">— ใช้ช่องพิมพ์ระบบ (ไม่ใช้บลูทูธ) —</option>' +
+      list.map(d => `<option value="${d.path}">${d.label}</option>`).join('');
+    if (cur) sel.value = cur;
+  }
+
+  // refresh the lists whenever the settings sheet is opened
   const _openSettings = window.openPrinterSettings;
   window.openPrinterSettings = function () {
     if (typeof _openSettings === 'function') _openSettings.apply(this, arguments);
-    ensureCamField();
-    populateCameras();
+    ensureCamField(); populateCameras();
+    ensurePrnField(); populatePrinters();
   };
-  window.addEventListener('load', () => { setTimeout(populateCameras, 600); });
+  window.addEventListener('load', () => { setTimeout(() => { populateCameras(); populatePrinters(); }, 600); });
 
   /* ---- 2. save to disk through Electron ---- */
   window.savePhoto = async function () {
@@ -108,7 +136,8 @@
     spawnConfetti(document.getElementById('printerIll'));
     if (typeof newOrder === 'function' && !orderNo) newOrder();
 
-    const digital = await buildStrip('digital');
+    const digital = await buildStrip('digital');       // colour slip for the QR viewer
+    const mono = await buildStrip('print');             // black-and-white slip for the printer
     setUpNote('⏳ กำลังอัปโหลดรูปขึ้นคลาวด์…', '#8a90a6');
     uploadToGitHub(digital, orderNo).then(r => {
       if (r && r.skipped) { setUpNote('ℹ️ ยังไม่ได้ตั้งค่า Cloud (⚙︎) — QR จะยังโหลดรูปไม่ได้', '#b26a00'); return; }
@@ -117,15 +146,24 @@
       setUpNote('⚠️ อัปโหลดรูปไม่สำเร็จ: ' + (e && e.message ? e.message : e), '#b3261e');
     });
 
-    // progress bar, then open the system print dialog with the slip
+    const btPath = g('btPrinterPath');
     let p = 0;
     const iv = setInterval(async () => {
       p += Math.random() * 14 + 6;
       if (p >= 100) {
         p = 100; clearInterval(iv); makeQR();
-        if (window.desktop && window.desktop.printImage) {
-          try { await window.desktop.printImage(digital); } catch (e) { console.warn('print', e); }
-        }
+        try {
+          if (btPath && window.desktop && window.desktop.btPrint && window.slipToEscPos) {
+            // Bluetooth 80mm thermal printer (ESC/POS over the paired serial port)
+            const bytes = await window.slipToEscPos(mono);
+            const r = await window.desktop.btPrint(btPath, bytes);
+            if (!r || !r.ok) alert('พิมพ์บลูทูธไม่สำเร็จ: ' + (r && r.error ? r.error : '') +
+              '\n\nตรวจสอบ: จับคู่เครื่องปริ้นใน System Settings → Bluetooth แล้ว / เปิดเครื่องปริ้น / เลือกเครื่องถูกตัวในปุ่ม ⚙︎');
+          } else if (window.desktop && window.desktop.printImage) {
+            // fall back to the macOS system print dialog
+            await window.desktop.printImage(digital);
+          }
+        } catch (e) { console.warn('print', e); alert('พิมพ์ไม่สำเร็จ: ' + (e && e.message ? e.message : e)); }
         setTimeout(() => go('done'), 350);
       }
       setBar(p);

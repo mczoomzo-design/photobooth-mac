@@ -49,6 +49,40 @@ ipcMain.handle('save-image', async (_e, dataUrl, name) => {
   return { ok: true, path: res.filePath };
 });
 
+/* ---- list Bluetooth/serial printers (paired SPP printers show as /dev/cu.*) ---- */
+ipcMain.handle('list-printers', async () => {
+  let out = [];
+  try {
+    out = fs.readdirSync('/dev')
+      .filter(n => /^cu\./.test(n))                 // call-up (output) serial nodes
+      .filter(n => !/Bluetooth-Incoming/i.test(n))  // drop the generic BT serial stub
+      .map(n => ({ path: '/dev/' + n, label: n.replace(/^cu\./, '') }));
+  } catch (e) {}
+  return out;
+});
+
+/* ---- write raw ESC/POS bytes to a serial printer (chunked for SPP buffers) ---- */
+ipcMain.handle('bt-print', async (_e, devPath, bytes) => {
+  const buf = Buffer.from(bytes.buffer ? bytes.buffer : bytes);
+  return await new Promise(resolve => {
+    let fd;
+    try { fd = fs.openSync(devPath, 'w'); }
+    catch (e) { return resolve({ ok: false, error: 'open: ' + e.message }); }
+    const CHUNK = 1024;
+    let off = 0;
+    const step = () => {
+      if (off >= buf.length) { try { fs.closeSync(fd); } catch (e) {} return resolve({ ok: true }); }
+      const len = Math.min(CHUNK, buf.length - off);
+      fs.write(fd, buf, off, len, null, err => {
+        if (err) { try { fs.closeSync(fd); } catch (e) {} return resolve({ ok: false, error: 'write: ' + err.message }); }
+        off += len;
+        setTimeout(step, 8);   // let the SPP link drain between chunks
+      });
+    };
+    step();
+  });
+});
+
 /* ---- print a base64 PNG through the macOS system print dialog ---- */
 ipcMain.handle('print-image', async (_e, dataUrl) => {
   // Write the slip PNG + a tiny wrapper HTML to a temp dir, then print the file
