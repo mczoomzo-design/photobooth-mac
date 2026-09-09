@@ -27,7 +27,7 @@
     "mac": {
       "category": "public.app-category.photography",
       "identity": null,
-      "target": [{ "target": "dmg", "arch": ["universal"] }],
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
       "extendInfo": {
         "NSCameraUsageDescription": "ใช้กล้อง (Canon EOS RP ผ่าน USB-C) เพื่อถ่ายรูปในตู้ถ่ายภาพ",
         "NSMicrophoneUsageDescription": "ไม่ได้ใช้ไมโครโฟน"
